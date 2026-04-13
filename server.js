@@ -32,25 +32,10 @@ dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 const app = express();
 // Add this near your other imports
-const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5000';
+const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'https://pos-inky-two.vercel.app';
 // CORS
 app.use(cors({
-  origin: (origin, callback) => {
-    // 1. Allow if there is no origin (only in development)
-    if (!origin && process.env.NODE_ENV !== 'production') {
-      return callback(null, true);
-    }
-    
-    // 2. Allow if origin matches our frontend
-    // Use .startsWith to avoid issues with trailing slashes
-    if (origin && origin.startsWith(ALLOWED_ORIGIN)) {
-      callback(null, true);
-    } else {
-      // Log the rejected origin to your Vercel logs so you can see what failed
-      console.log('Blocked by CORS. Origin was:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: process.env.NODE_ENV === 'production' ? ALLOWED_ORIGIN : true,
   credentials: true,
 }));
 
