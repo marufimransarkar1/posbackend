@@ -114,9 +114,8 @@ export const refundSale = asyncHandler(async (req, res) => {
 
 
 // Add this to your salesController.js
-
 export const getSalePrint = asyncHandler(async (req, res) => {
-  // 1. Fetch Sale and Global Settings in parallel
+  // Fetch sale and settings in parallel
   const [sale, settings] = await Promise.all([
     Sale.findById(req.params.id)
       .populate('customer')
@@ -130,106 +129,248 @@ export const getSalePrint = asyncHandler(async (req, res) => {
     throw new Error('Sale not found');
   }
 
-  // 2. Destructure Settings with fallbacks
   const {
     businessName = 'RETAIL STORE',
     address = '',
     phone = '',
+    email: businessEmail = '',
     currencySymbol = '$',
-    receiptFooter = 'Please keep this receipt for your records.'
+    receiptFooter = 'Thank you for your purchase!',
+    taxName = 'TAX'
   } = settings || {};
 
-  const { invoiceNo, createdAt, total, amountPaid, change, items, customer, subtotal, tax } = sale;
+  const { invoiceNo, createdAt, total, amountPaid, change, items, customer, subtotal, tax, paymentMethod } = sale;
 
-  // 3. Generate the Template
+  // Format date nicely
+  const saleDate = new Date(createdAt).toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
   const html = `
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Invoice - ${invoiceNo}</title>
+        <title>Invoice ${invoiceNo}</title>
+        <meta charset="UTF-8">
         <style>
-          /* MONARCH ENVELOPE SPECIFIC CSS */
+          /* Monarch Envelope (3.87 x 7.5 inches) */
           @page {
             size: 3.87in 7.5in;
             margin: 0;
           }
 
-          body {
-            font-family: 'Courier New', Courier, monospace;
-            width: 3.87in;
-            margin: 0;
-            padding: 0.3in;
+          * {
             box-sizing: border-box;
-            color: #000;
-            font-size: 12px;
-            line-height: 1.4;
+            margin: 0;
+            padding: 0;
+          }
+
+          body {
+            width: 3.87in;
+            min-height: 7.5in;
+            margin: 0 auto;
+            padding: 0.25in 0.2in;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            line-height: 1.3;
+            color: #1e1e1e;
+            background: white;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
 
           .text-center { text-align: center; }
           .text-right { text-align: right; }
-          .bold { font-weight: bold; }
-          .uppercase { text-transform: uppercase; }
-          
-          .header { margin-bottom: 15px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-          .header h2 { margin: 0; font-size: 18px; }
-          
-          .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
-          
-          hr { border: 0; border-top: 1px dashed #000; margin: 10px 0; }
-          
-          .item-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-          .item-table th { border-bottom: 1px solid #000; text-align: left; }
-          .item-table td { padding: 4px 0; vertical-align: top; }
-          
-          .totals-section { margin-left: auto; width: 70%; }
-          .total-line { font-size: 14px; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; }
-          
-          .footer { margin-top: 30px; font-size: 10px; border-top: 1px solid #eee; padding-top: 10px; }
-          
+          .bold { font-weight: 700; }
+          .uppercase { text-transform: uppercase; letter-spacing: 0.3px; }
+          .text-muted { color: #5a5a5a; }
+
+          /* Header */
+          .store-header {
+            text-align: center;
+            margin-bottom: 18px;
+            border-bottom: 2px dashed #ccc;
+            padding-bottom: 12px;
+          }
+          .store-name {
+            font-size: 20px;
+            font-weight: 800;
+            margin: 0 0 4px 0;
+            letter-spacing: 0.5px;
+          }
+          .store-details {
+            font-size: 10px;
+            color: #444;
+          }
+
+          /* Invoice Info */
+          .flex-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+          }
+          .invoice-label {
+            font-weight: 700;
+          }
+
+          /* Divider */
+          .divider {
+            border-top: 1px dashed #aaa;
+            margin: 12px 0;
+          }
+
+          /* Customer Section */
+          .section-title {
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 11px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 3px;
+          }
+          .customer-details {
+            margin-bottom: 10px;
+          }
+          .customer-details div {
+            margin-bottom: 2px;
+          }
+
+          /* Items Table */
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+          }
+          .items-table th {
+            text-align: left;
+            padding: 6px 0 3px 0;
+            border-bottom: 1px solid #000;
+            font-weight: 700;
+            font-size: 10px;
+            text-transform: uppercase;
+          }
+          .items-table td {
+            padding: 5px 0;
+            border-bottom: 1px dotted #ccc;
+            vertical-align: top;
+          }
+          .items-table tr:last-child td {
+            border-bottom: none;
+          }
+          .item-name {
+            font-weight: 600;
+          }
+          .item-meta {
+            font-size: 9px;
+            color: #666;
+          }
+
+          /* Totals */
+          .totals-container {
+            margin-top: 8px;
+            border-top: 2px solid #000;
+            padding-top: 8px;
+          }
+          .total-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+          }
+          .total-row.grand-total {
+            font-size: 16px;
+            font-weight: 800;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid #000;
+          }
+
+          /* Payment */
+          .payment-box {
+            background: #f5f5f5;
+            padding: 8px;
+            margin: 12px 0;
+            border-radius: 4px;
+          }
+
+          /* Footer */
+          .footer {
+            margin-top: 25px;
+            text-align: center;
+            font-size: 9px;
+            color: #555;
+            border-top: 1px dashed #ccc;
+            padding-top: 12px;
+          }
+
+          /* Print Optimization */
           @media print {
-            body { -webkit-print-color-adjust: exact; }
+            body {
+              padding: 0.25in 0.2in;
+              background: white;
+            }
+            .no-print { display: none; }
           }
         </style>
       </head>
       <body>
-        <div class="header text-center">
-          <h2 class="uppercase">${businessName}</h2>
-          <div>${address}</div>
-          <div>Tel: ${phone}</div>
+        <!-- Store Header -->
+        <div class="store-header">
+          <div class="store-name uppercase">${businessName}</div>
+          ${address ? `<div class="store-details">${address}</div>` : ''}
+          ${phone ? `<div class="store-details">Tel: ${phone}</div>` : ''}
+          ${businessEmail ? `<div class="store-details">${businessEmail}</div>` : ''}
         </div>
 
-        <div class="info-row">
-          <span class="bold">Invoice:</span>
-          <span>${invoiceNo}</span>
+        <!-- Invoice Metadata -->
+        <div class="flex-row">
+          <span class="invoice-label">INVOICE #:</span>
+          <span class="bold">${invoiceNo}</span>
         </div>
-        <div class="info-row">
-          <span class="bold">Date:</span>
-          <span>${new Date(createdAt).toLocaleString()}</span>
+        <div class="flex-row">
+          <span class="invoice-label">DATE:</span>
+          <span>${saleDate}</span>
+        </div>
+        <div class="flex-row">
+          <span class="invoice-label">PAYMENT:</span>
+          <span class="uppercase">${paymentMethod.replace('_', ' ')}</span>
         </div>
 
-        <hr>
+        <div class="divider"></div>
 
-        <div class="bold uppercase">Bill To:</div>
-        ${customer ? `
-          <div>${customer.name}</div>
-          ${customer.phone ? `<div>${customer.phone}</div>` : ''}
-          ${customer.address ? `<div>${customer.address}</div>` : ''}
-        ` : `<div>Walk-in Customer</div>`}
+        <!-- Customer -->
+        <div class="section-title">Bill To</div>
+        <div class="customer-details">
+          ${customer ? `
+            <div class="bold">${customer.name}</div>
+            ${customer.phone ? `<div>📞 ${customer.phone}</div>` : ''}
+            ${customer.email ? `<div>✉️ ${customer.email}</div>` : ''}
+            ${customer.address ? `<div class="text-muted">${customer.address}</div>` : ''}
+          ` : `<div>Walk-in Customer</div>`}
+        </div>
 
-        <hr>
+        <div class="divider"></div>
 
-        <table class="item-table">
+        <!-- Items -->
+        <table class="items-table">
           <thead>
             <tr>
-              <th width="60%">Item</th>
+              <th width="55%">Item</th>
               <th width="10%" class="text-center">Qty</th>
-              <th width="30%" class="text-right">Total</th>
+              <th width="35%" class="text-right">Amount</th>
             </tr>
           </thead>
           <tbody>
             ${items.map(item => `
               <tr>
-                <td>${item.name}</td>
+                <td>
+                  <div class="item-name">${item.name}</div>
+                  <div class="item-meta">${currencySymbol}${item.unitPrice.toFixed(2)} each</div>
+                  ${item.discount > 0 ? `<div class="item-meta" style="color:#c00;">Disc: -${currencySymbol}${item.discount.toFixed(2)}</div>` : ''}
+                </td>
                 <td class="text-center">${item.quantity}</td>
                 <td class="text-right">${currencySymbol}${item.subtotal.toFixed(2)}</td>
               </tr>
@@ -237,41 +378,55 @@ export const getSalePrint = asyncHandler(async (req, res) => {
           </tbody>
         </table>
 
-        <hr>
-
-        <div class="totals-section">
-          <div class="info-row">
-            <span>Subtotal:</span>
+        <!-- Totals -->
+        <div class="totals-container">
+          <div class="total-row">
+            <span>Subtotal</span>
             <span>${currencySymbol}${subtotal.toFixed(2)}</span>
           </div>
-          <div class="info-row">
-            <span>Tax:</span>
+          ${tax > 0 ? `
+          <div class="total-row">
+            <span>${taxName} (Incl.)</span>
             <span>${currencySymbol}${tax.toFixed(2)}</span>
           </div>
-          <div class="info-row bold total-line">
-            <span>TOTAL:</span>
+          ` : ''}
+          ${sale.discount > 0 ? `
+          <div class="total-row" style="color:#c00;">
+            <span>Discount</span>
+            <span>-${currencySymbol}${sale.discount.toFixed(2)}</span>
+          </div>
+          ` : ''}
+          <div class="total-row grand-total">
+            <span>TOTAL</span>
             <span>${currencySymbol}${total.toFixed(2)}</span>
-          </div>
-          <div class="info-row" style="margin-top: 10px;">
-            <span>Paid:</span>
-            <span>${currencySymbol}${amountPaid.toFixed(2)}</span>
-          </div>
-          <div class="info-row">
-            <span>Change:</span>
-            <span>${currencySymbol}${change.toFixed(2)}</span>
           </div>
         </div>
 
-        <div class="footer text-center">
-          <p class="bold">Cashier: ${sale.cashier?.name || 'Admin'}</p>
-          <p>${receiptFooter}</p>
-          <p style="font-size: 8px; color: #666;">Generated by ${businessName} POS</p>
+        <!-- Payment Details -->
+        <div class="payment-box">
+          <div class="flex-row">
+            <span>Amount Paid</span>
+            <span class="bold">${currencySymbol}${amountPaid.toFixed(2)}</span>
+          </div>
+          <div class="flex-row">
+            <span>Change</span>
+            <span class="bold">${currencySymbol}${change.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+          <div>Cashier: ${sale.cashier?.name || 'Admin'}</div>
+          <div style="margin-top: 8px;">${receiptFooter}</div>
+          <div style="margin-top: 10px; font-size: 8px; color: #888;">
+            ${new Date().toLocaleDateString()}
+          </div>
         </div>
 
         <script>
           window.onload = () => {
             window.print();
-            setTimeout(() => { window.close(); }, 700);
+            setTimeout(() => { window.close(); }, 1000);
           };
         </script>
       </body>
