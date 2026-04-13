@@ -1,10 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import { existsSync } from 'fs';
-
-dotenv.config();
+import dns from 'node:dns';
 import connectDB from './config/db.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
@@ -24,41 +21,56 @@ import setupRoutes from './routes/setupRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import stockRoutes from './routes/stockRoutes.js';
-import dns from 'node:dns';
 
-// Force Node.js to use Google/Cloudflare DNS for SRV resolution
-// This bypasses the buggy local OS resolver in Node 24.14.0
+// ----------------------------------------------------------------------
+// 1. DNS & Environment Validation
+// ----------------------------------------------------------------------
+// Force DNS servers (fixes Node 24.14.0 SRV bug)
 dns.setServers(['8.8.8.8', '1.1.1.1']);
 
+// Validate critical environment variables (fail fast)
+const requiredEnv = ['MONGO_URI', 'FRONTEND_URL'];
+const missing = requiredEnv.filter(key => !process.env[key]);
+if (missing.length) {
+  console.error(`❌ Missing required env: ${missing.join(', ')}`);
+  process.exit(1);
+}
+
+const ALLOWED_ORIGIN = process.env.FRONTEND_URL;
+const isProduction = process.env.NODE_ENV === 'production';
+
+// ----------------------------------------------------------------------
+// 2. Express App
+// ----------------------------------------------------------------------
 const app = express();
-// Add this near your other imports
-const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'https://pos-inky-two.vercel.app';
-// CORS
+
+// CORS – allow only frontend origin in production
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? ALLOWED_ORIGIN : true,
+  origin: isProduction ? ALLOWED_ORIGIN : true,
   credentials: true,
 }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// ----------------------------------------------------------------------
+// 3. Security Middleware (blocks direct access without referer/origin)
+// ----------------------------------------------------------------------
 const securityMiddleware = (req, res, next) => {
   if (req.method === 'OPTIONS') return next();
   if (req.path.startsWith('/api/setup') || req.path === '/api/status') return next();
 
-  if (process.env.NODE_ENV === 'production') {
+  if (isProduction) {
     const origin = req.headers.origin;
     const referer = req.headers.referer;
-
-    // Check if either the origin or referer starts with your allowed URL
     const isGoodOrigin = origin && origin.startsWith(ALLOWED_ORIGIN);
     const isGoodReferer = referer && referer.startsWith(ALLOWED_ORIGIN);
 
     if (!isGoodOrigin && !isGoodReferer) {
-      console.log(`Access Denied. Origin: ${origin}, Referer: ${referer}`);
+      console.warn(`⛔ Blocked ${req.method} ${req.path} – origin: ${origin}, referer: ${referer}`);
       return res.status(403).json({
         success: false,
-        message: 'Direct access forbidden.'
+        message: 'Direct access forbidden.',
       });
     }
   }
@@ -67,15 +79,24 @@ const securityMiddleware = (req, res, next) => {
 
 app.use(securityMiddleware);
 
-// Setup route always available (for first-time setup)
+// ----------------------------------------------------------------------
+// 4. Routes & DB Connection
+// ----------------------------------------------------------------------
+// Setup route always available
 app.use('/api/setup', setupRoutes);
 
-// Check if env is configured
 const isConfigured = !!process.env.MONGO_URI;
-
 if (isConfigured) {
-  connectDB();
+  // Connect to DB (assumes connectDB returns a promise)
+  try {
+    await connectDB();
+    console.log('✅ Database connected');
+  } catch (err) {
+    console.error('❌ Database connection failed:', err.message);
+    process.exit(1);
+  }
 
+  // Mount API routes
   app.use('/api/auth', authRoutes);
   app.use('/api/products', productRoutes);
   app.use('/api/categories', categoryRoutes);
@@ -90,18 +111,55 @@ if (isConfigured) {
   app.use('/api/users', userRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/stock', stockRoutes);
+} else {
+  console.warn('⚠️ MONGO_URI missing – API routes disabled');
 }
 
+// Status endpoint
 app.get('/api/status', (req, res) => {
-  res.json({ 
-    configured: isConfigured, 
+  res.json({
+    configured: isConfigured,
     appName: process.env.APP_NAME || 'POS System',
-    version: '1.0.0'
+    version: '1.0.0',
+    environment: isProduction ? 'production' : 'development',
   });
 });
 
+// Error handling (must be last)
 app.use(notFound);
 app.use(errorHandler);
 
+// ----------------------------------------------------------------------
+// 5. Start Server with Graceful Shutdown
+// ----------------------------------------------------------------------
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT} (${isProduction ? 'prod' : 'dev'})`);
+});
+
+// Graceful shutdown
+const shutdown = (signal) => {
+  console.log(`\n${signal} received. Closing server...`);
+  server.close(() => {
+    console.log('Server closed.');
+    process.exit(0);
+  });
+  // Force exit after 10 seconds if something hangs
+  setTimeout(() => {
+    console.error('Could not close connections in time, forcefully exiting');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Catch unhandled rejections and uncaught exceptions
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection:', reason);
+  if (isProduction) process.exit(1);
+});
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  if (isProduction) process.exit(1);
+});
