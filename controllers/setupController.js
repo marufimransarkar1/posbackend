@@ -248,7 +248,7 @@ export const runSetup = asyncHandler(async (req, res) => {
   const adminExists = await User.findOne({ role: 'admin' });
   if (adminExists) {
     res.status(403); // Forbidden
-    throw new Error('Setup already completed. Contact the system administrator.');
+    throw new Error('Setup already completed. Contact the system administrator or developer.');
   }
 
   // 3. Validation
