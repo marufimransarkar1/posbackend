@@ -2,9 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { existsSync } from 'fs';
-
-dotenv.config();
+import dns from 'node:dns';
 import connectDB from './config/db.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
@@ -24,24 +22,59 @@ import setupRoutes from './routes/setupRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import stockRoutes from './routes/stockRoutes.js';
-import dns from 'node:dns';
+
+dotenv.config();
 
 // Force Node.js to use Google/Cloudflare DNS for SRV resolution
 // This bypasses the buggy local OS resolver in Node 24.14.0
 dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 const app = express();
+const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'https://pos-inky-two.vercel.app';
 
-// CORS
+// 1. Enhanced CORS Configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://pos-inky-two.vercel.app',
-  credentials: true
+  origin: (origin, callback) => {
+    // Allow requests with no origin only in development; block in production
+    if (!origin && process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    if (origin === ALLOWED_ORIGIN) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Setup route always available (for first-time setup)
+// 2. Security Middleware to block direct URL access/Postman
+const securityMiddleware = (req, res, next) => {
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+
+  // Always allow the setup route
+  if (req.path.startsWith('/api/setup')) return next();
+
+  // In production, block if there is no origin AND no referer (Direct URL hit)
+  if (process.env.NODE_ENV === 'production') {
+    if (!origin && (!referer || !referer.startsWith(ALLOWED_ORIGIN))) {
+      return res.status(403).json({
+        message: 'Direct access to the API is forbidden.'
+      });
+    }
+  }
+  next();
+};
+
+app.use(securityMiddleware);
+
+// Setup route always available
 app.use('/api/setup', setupRoutes);
 
 // Check if env is configured
