@@ -45,7 +45,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/setup', setupRoutes);
 
 // Check if env is configured
-const isConfigured = existsSync('.env') && process.env.MONGO_URI;
+const isConfigured = !!process.env.MONGO_URI;
 
 if (isConfigured) {
   connectDB();
