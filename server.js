@@ -31,7 +31,8 @@ import dns from 'node:dns';
 dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 const app = express();
-
+// Add this near your other imports
+const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5000';
 // CORS
 app.use(cors({
   origin: (origin, callback) => {
@@ -57,24 +58,22 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 const securityMiddleware = (req, res, next) => {
-  // Always allow OPTIONS requests (CORS preflight)
   if (req.method === 'OPTIONS') return next();
-
-  const origin = req.headers.origin;
-  const referer = req.headers.referer;
-
-  if (req.path.startsWith('/api/setup')) return next();
+  if (req.path.startsWith('/api/setup') || req.path === '/api/status') return next();
 
   if (process.env.NODE_ENV === 'production') {
-    // Allow if it has the right Origin
+    const origin = req.headers.origin;
+    const referer = req.headers.referer;
+
+    // Check if either the origin or referer starts with your allowed URL
     const isGoodOrigin = origin && origin.startsWith(ALLOWED_ORIGIN);
-    // OR allow if it has the right Referer (fallback for some GET requests)
     const isGoodReferer = referer && referer.startsWith(ALLOWED_ORIGIN);
 
     if (!isGoodOrigin && !isGoodReferer) {
+      console.log(`Access Denied. Origin: ${origin}, Referer: ${referer}`);
       return res.status(403).json({
         success: false,
-        message: 'Direct access forbidden. Please use the official web dashboard.'
+        message: 'Direct access forbidden.'
       });
     }
   }
