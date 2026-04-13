@@ -143,12 +143,14 @@ export const runSetup = asyncHandler(async (req, res) => {
     'PORT=5000',
   ].join('\n') + '\n';
 
-  try {
-    writeFileSync('.env', env, 'utf8');
-  } catch (err) {
-    res.status(500);
-    throw new Error('Failed to write .env file: ' + err.message + '. Check folder write permissions.');
-  }
+  // try {
+  //   writeFileSync('.env', env, 'utf8');
+  // } catch (err) {
+  //   res.status(500);
+  //   throw new Error('Failed to write .env file: ' + err.message + '. Check folder write permissions.');
+  // }
+  
+  console.log('Vercel environment detected: Skipping .env file creation.');
 
   // ── Step 5: Create admin + settings ───────────────────────────────────────
   try {
