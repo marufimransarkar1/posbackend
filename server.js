@@ -34,7 +34,7 @@ const app = express();
 
 // CORS
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://pos-inky-two.vercel.app/',
+  origin: process.env.FRONTEND_URL || 'https://pos-inky-two.vercel.app',
   credentials: true
 }));
 
