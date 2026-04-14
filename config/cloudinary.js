@@ -1,23 +1,31 @@
 import { v2 as cloudinaryV2 } from 'cloudinary';
 import multer from 'multer';
-import pkg from 'multer-storage-cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
-// Handle both potential export styles
-const CloudinaryStorage = pkg.CloudinaryStorage || pkg;
-
+// 1. Explicitly verify configuration
 cloudinaryV2.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true
 });
+
+// 2. Defensive check: If this logs 'undefined', the import itself is the issue
+console.log('Cloudinary Check:', cloudinaryV2.uploader ? '✅ Ready' : '❌ Undefined');
 
 const storage = new CloudinaryStorage({
-  cloudinary: cloudinaryV2,
-  params: {
-    folder: 'pos-system',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-  },
+  // Use the explicitly imported v2 object
+  cloudinary: cloudinaryV2, 
+  params: async (req, file) => {
+    return {
+      folder: 'pos-system',
+      format: 'png', // or logic to pick format
+      public_id: file.originalname.split('.')[0],
+    };
+  },
 });
 
-export const upload = multer({ storage });
+export const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
