@@ -141,6 +141,18 @@ export const getSalePrint = asyncHandler(async (req, res) => {
 
   const { invoiceNo, createdAt, total, amountPaid, change, items, customer, subtotal, tax, paymentMethod } = sale;
 
+  const formatPhone = (phoneNumber) => {
+    if (!phoneNumber) return '';
+    const str = String(phoneNumber).trim();
+    // Bangladeshi mobile: 11 digits starting with '01'
+    if (/^01[0-9]{9}$/.test(str) && !str.startsWith('+88')) {
+      return '+88' + str;
+    }
+    return str;
+  };
+
+  const customerPhone = customer?.phone ? formatPhone(customer.phone) : '';
+
   // Format date nicely
   const saleDate = new Date(createdAt).toLocaleString('en-US', {
     year: 'numeric',
@@ -346,7 +358,7 @@ export const getSalePrint = asyncHandler(async (req, res) => {
         <div class="customer-details">
           ${customer ? `
             <div class="bold">${customer.name}</div>
-            ${customer.phone ? `<div>📞 ${customer.phone}</div>` : ''}
+            ${customerPhone ? `<div>📞 ${customerPhone}</div>` : ''}
             ${customer.email ? `<div>✉️ ${customer.email}</div>` : ''}
             ${customer.address ? `<div class="text-muted">${customer.address}</div>` : ''}
           ` : `<div>Walk-in Customer</div>`}
