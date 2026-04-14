@@ -1,9 +1,11 @@
 import { v2 as cloudinaryV2 } from 'cloudinary';
 import multer from 'multer';
-import pkg from 'multer-storage-cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
-// Handle both potential export styles
-const CloudinaryStorage = pkg.CloudinaryStorage || pkg;
+
+if (!process.env.CLOUDINARY_CLOUD_NAME) {
+  console.error("Cloudinary environment variables are missing!");
+}
 
 cloudinaryV2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -13,7 +15,7 @@ cloudinaryV2.config({
 });
 
 const storage = new CloudinaryStorage({
-  cloudinary: cloudinaryV2,
+  cloudinary: cloudinaryV2, // Ensure this is the actual V2 object
   params: {
     folder: 'pos-system',
     allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
