@@ -21,7 +21,12 @@ export const Brand = mongoose.model('Brand', brandSchema);
 const customerSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, lowercase: true },
-  phone: { type: String },
+  phone: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true
+  },
   address: { type: String },
   loyaltyPoints: { type: Number, default: 0 },
   totalPurchase: { type: Number, default: 0 },

@@ -41,6 +41,15 @@ export const getCustomers = asyncHandler(async (req, res) => {
   res.json({ success: true, data: customers, total, page, pages: Math.ceil(total / limit) });
 });
 
+export const checkCustomerPhone = asyncHandler(async (req, res) => {
+  const { phone } = req.query;
+  if (!phone) {
+    return res.status(400).json({ success: false, message: 'Phone number required' });
+  }
+  const existing = await Customer.findOne({ phone });
+  res.json({ success: true, exists: !!existing });
+});
+
 export const createCustomer = asyncHandler(async (req, res) => {
   const customer = await Customer.create(req.body);
   res.status(201).json({ success: true, data: customer });
