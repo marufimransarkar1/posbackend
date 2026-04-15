@@ -438,7 +438,7 @@ export const getSalePrint = asyncHandler(async (req, res) => {
         <script>
           window.onload = () => {
             window.print();
-            setTimeout(() => { window.close(); }, 1000);
+            // setTimeout(() => { window.close(); }, 1000);
           };
         </script>
       </body>
